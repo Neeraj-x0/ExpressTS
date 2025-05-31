@@ -1,49 +1,31 @@
-import { clerkMiddleware, createClerkClient } from "@clerk/express";
-import express, { Request, Response } from "express";
-import "dotenv/config";
+import express, { Request, Response, NextFunction } from "express";
+import { globalErrorHandler } from "./middleware/errorMiddleware";
+import { AppError } from "./utils/AppError";
+import profileRoutes from "./routes/profile";
 
 const port = process.env.PORT || 3000;
-
 const app = express();
 
-const clerkClient = createClerkClient({
-  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-  apiUrl: "https://api.clerk.com",
-  secretKey: process.env.CLERK_SECRET_KEY,
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Routes
+app.get("/", (req: Request, res: Response) => {
+  res.send("Hello World!");
 });
 
-app.use(clerkMiddleware({ clerkClient }));
+// Mount the profile routes
+app.use("/profile", profileRoutes);
 
-app.use(clerkMiddleware());
-//@ts-ignore
-app.get("/auth-state", (req: any, res: any) => {
-  const authState = req.auth;
-  return res.json(authState);
+// 404 handler for undefined routes
+app.all("*", (req: Request, res: Response, next: NextFunction) => {
+  next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
 
-//@ts-ignore
-app.get("/", async (req: Request, res: Response) => {
-  const { emailAddress, password } = req.query;
-  if (!emailAddress || !password) {
-    return res
-      .status(400)
-      .json({ error: "Email Address and Password are required" });
-  }
-  try {
-    const users = await clerkClient.users.getUserList({
-      emailAddress: [`${emailAddress}`],
-    });
-    const id = users.data[0].id;
-    const isPasswordVerified = await clerkClient.users.verifyPassword({
-      password: `${password}`,
-      userId: id,
-    });
-    let verifed = isPasswordVerified.verified;
-    res.json({ verifed });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
+// Global error handler
+app.use(globalErrorHandler);
+
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
